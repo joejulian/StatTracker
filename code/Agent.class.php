@@ -231,6 +231,43 @@ class Agent {
 	}
 
 	/**
+	 * Gets the value of the specified stat on the specified date.
+	 *
+	 * @param string|object If string, the stat's database key. If object, a Stat object for the class
+	 * @param string $date Date in YYYY-MM-DD format
+	 *
+	 * @return the value for the stat
+	 */
+	public function getStatForDate($stat, $date) {
+		if (!StatTracker::isValidStat($stat)) {
+			throw new Exception(sprintf("'%s' is not a valid stat", $stat));
+		}
+
+		if (is_object($stat)) {
+			$stat = $stat->stat;
+		}
+	
+		if (!is_array($this->stats) || !isset($this->stats[$stat])) {
+			global $mysql;
+			
+			$sql = "SELECT value, timestamp FROM Data WHERE stat = '%s' AND timestamp LIKE '%s%%' AND agent ='%s' ORDER BY timestamp DESC LIMIT 1;";
+			$sql = sprintf($sql, $stat, $date, $this->name);
+			$res = $mysql->query($sql);
+			$row = $res->fetch_assoc();
+			
+			$this->latest_entry = $row['timestamp'];
+			
+			if (!is_array($this->stats)) {
+				$this->stats = array();
+			}
+	
+			$this->stats[$stat] = $row['value'];
+		}
+
+		return $this->stats[$stat];
+	}
+
+	/**
 	 * Gets the latest entry for all stats for this agent
 	 *
 	 * @param boolean $refresh whether or not to refresh the cached value
@@ -241,6 +278,23 @@ class Agent {
 		if (!is_array($this->stats || $refresh)) {
 			foreach (StatTracker::getStats() as $stat) {
 				$this->getLatestStat($stat->stat, $refresh);
+			}
+		}
+
+		return $this->stats;
+	}
+
+	/**
+	 * Returns the stats submitted for the agent on a specified date.
+	 *
+	 * @param string date in YYYY-MM-DD format
+	 *
+	 * @return 
+	 */
+	public function getStatsForDate($date) {
+		if (!is_array($this->stats)) {
+			foreach (StatTracker::getStats() as $stat) {
+				$this->getStatForDate($stat->stat, $date);
 			}
 		}
 
@@ -343,7 +397,7 @@ class Agent {
 
 	/**
 	 * Gets the date and timestamps for an Agent's stat submissions. This is limited to the latest
-	 * submission on a given day -- multiple submission per day are counted as 1 submissions.
+	 * submission on a given day -- multiple submission per day are counted as 1 submission.
 	 *
 	 * @return array of objects containing a date and a timestamp
 	 */
@@ -372,6 +426,36 @@ class Agent {
 
 		return $this->submissions;
 
+	}
+
+	/**
+	 * Gets the latest submission from the specified date
+	 *
+	 * @param string $date a date in YYY-MM-DD format
+	 *
+	 * @return Associative array of stat => value for the given date
+	 */
+	public function getSubmission($date) {
+		global $mysql;
+		
+		$sql = sprintf("CALL GetRawStatsForAgent('%s');", $this->name);
+		if (!$mysql->query($sql)) {
+			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
+		}
+
+		$sql = sprintf("SELECT * FROM RawStatsForAgent WHERE date = '%s';", $date);
+		$res = $mysql->query($sql);
+
+		if (!$res) {
+			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
+		}
+
+		$data = array();
+		while ($row = $res->fetch_assoc()) {
+			$data[$row['stat']] = $row['value'];
+		}
+
+		return $data;
 	}
 }
 ?>
