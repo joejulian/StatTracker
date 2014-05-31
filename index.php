@@ -10,6 +10,7 @@ require_once("vendor/autoload.php");
 const ENL_GREEN = "#00F673";
 const RES_BLUE = "#00C4FF";
 
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 $mysql = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -30,13 +31,14 @@ if (isset($_SESSION['agent'])) {
 
 // Default handler. Will match any alphnumeric string. If the page doesn't exist,
 // 404
-$app->match('/{page}', function ($page) use ($app) {
+$app->match('/{page}', function (Request $request, $page) use ($app) {
 	if ($page == "dashboard" ||
 	    $page == "my-stats" ||
 	    $page == "leaderboards") {
 	
 		return $app['twig']->render("index.twig", array(
-			"page" => $page
+			"page" => $page,
+			"args" => StatTracker::filterPageParameters($request->query->all())
 		));
 	}
 	else if ($page == "terms-of-use") {
