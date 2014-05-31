@@ -1,3 +1,13 @@
+// http://stackoverflow.com/a/1137579
+String.prototype.replaceAll = function(search, replace) {
+    //if replace is null, return original string otherwise it will
+    //replace search string with 'undefined'.
+    if(!replace) 
+        return this;
+
+    return this.replace(new RegExp(search, 'g'), replace);
+};
+
 var StatTracker = new function() {
 	this.baseUrl = "http://api.johnluetke.net/ingress/stats/";
 	this.pageToLoad = "dashboard";
