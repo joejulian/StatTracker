@@ -30,6 +30,7 @@
         	});
 
 		StatTracker.pageToLoad = "{{ page }}";
+		StatTracker.pageArguments = JSON.parse("{{ args|json_encode }}".replaceAll("&quot;", "\""));
 	});
 
 	</script>
