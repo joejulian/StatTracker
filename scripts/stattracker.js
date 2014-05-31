@@ -11,6 +11,7 @@ String.prototype.replaceAll = function(search, replace) {
 var StatTracker = new function() {
 	this.baseUrl = "http://api.johnluetke.net/ingress/stats/";
 	this.pageToLoad = "dashboard";
+	this.pageArguments = { };
 	this.message = null;
 
 	this.hideLogout = function() {
@@ -21,6 +22,7 @@ var StatTracker = new function() {
 		$(".tabs li[class~='" + this.pageToLoad +"'] a").addClass("selected");
 		$.ajax({url: this.baseUrl + "page/" + this.pageToLoad,
 			type: "GET",
+			data: this.pageArguments,
 			dataType: "html",
 			statusCode: {
 				500: function() {
