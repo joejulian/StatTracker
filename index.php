@@ -96,10 +96,17 @@ $app->get('/data/badges/{what}', function($what) use ($app, $agent) {
 	return $app->json($data);
 });
 
-$app->get('/data/submissions', function() use ($app, $agent) {
-	$data = $agent->getSubmissions();
-	return json_encode($data);
-});
+$app->get('/data/submission/{what}', function($what) use ($app, $agent) {
+	if ($what == "list") {
+		return $app->json($agent->getSubmissions());
+	}
+	else if (preg_match("/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/", $what) === 1) {
+		return $app->json($agent->getSubmission($what));
+	}
+	else {
+		$app->abort(405, "Invalid Submission action");
+	}
+})->value("what", "list");
 
 $app->get('/data/level/{what}', function ($what) use ($app, $agent) {
 	switch ($what) {
