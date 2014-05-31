@@ -50,6 +50,32 @@ class StatTracker {
 	}
 
 	/**
+	 * Filters array of parameters for a page down to an allowed list
+	 *
+	 * @param array $raw Raw, unfiltered list of possible parameters
+	 *
+	 * @return array of filtered and validated page parameters
+	 */
+	public static function filterPageParameters($raw) {
+		$allowedParams = array(
+			// array index is parameter name, value is regex to validate value
+			"x" => "bad",
+			"date" => "/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/"
+		);
+
+		$params = array();
+
+		foreach ($allowedParams as $name => $regex) {
+			if (array_key_exists($name, $raw) &&
+			    preg_match($regex, $raw[$name]) === 1) {
+				$params[$name] = $raw[$name];
+			}
+		}
+
+		return $params;
+	}
+
+	/**
 	 * Generates an authorization code for the given email address. If the email address is not
 	 * already in the database, it will be inserted. If it already exists, the authorization code
 	 * will be updated.
