@@ -49,6 +49,14 @@ $app->match('/{page}', function (Request $request, $page) use ($app) {
 			case "login":
 				return $app->json(Authentication::getInstance()->login());
 				break;
+			case "callback":
+				if (Authentication::getInstance()->callback()) {
+					return $app->redirect("./dashboard");
+				}
+				else {
+					$app->abort(500, "An error occured during authentication");
+				}
+				break;
 			case "logout":
 				return $app->json(Authentication::getInstance()->logout());
 				break;
