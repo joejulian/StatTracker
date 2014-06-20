@@ -181,8 +181,16 @@ class StatTracker {
 		}
 		else {
 			$ts = date("Y-m-d H:i:s");
-			$stmt = $mysql->prepare("INSERT INTO Data VALUES (?, ?, ?, ?);");
-			$stmt->bind_param("sssd", $agent_name, $ts, $stat_key, $value);
+
+			if (isset($postdata['timestamp'])) {
+				$ts = $postdata['timestamp'];
+				$stmt = $mysql->prepare("UPDATE Data SET value = ? WHERE stat = ? AND agent = ? AND timestamp = ?;");
+				$stmt->bind_param("dsss", $value, $stat_key, $agent_name, $ts);
+			}
+			else {
+				$stmt = $mysql->prepare("INSERT INTO Data VALUES (?, ?, ?, ?);");
+				$stmt->bind_param("sssd", $agent_name, $ts, $stat_key, $value);
+			}
 
 			foreach (self::getStats() as $stat) {
 				if (!isset($postdata[$stat->stat])) {
@@ -211,11 +219,16 @@ class StatTracker {
 				$response->message = "Your stats have been recieved. Since this was your first submission, predictions are not available. Submit again tomorrow to see your predictions.";
 			}
 			else if (!$response->error) {
-				$response->message = "Your stats have been recieved.";
+				if (isset($postdata['timestamp'])) {
+					$response->message = "Your submission has been corrected";
+				}
+				else {
+					$response->message = "Your stats have been recieved.";
+				}
 			}
 		}
 
-		return json_encode($response, JSON_NUMERIC_CHECK);
+		return $response;
 	}
 
 	/**

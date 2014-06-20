@@ -1,15 +1,28 @@
 <div id="message" />
 <div id="badges" />
+{% if agent.numSubmissions > 0 %}
+<div id="submissions" />
+	<select name="submission">
+		<option value="today">Today</option>
+{% for submission in agent.submissions if submission.date|date("Y-m-d") != "now"|date("Y-m-d") %}
+		<option value="{{ submission.date|date("Y-m-d") }}">{{ submission.date|date("F j") }}</option>
+{% endfor %}
+	</select>
+</div>
+{% endif %}
 <form method="post" action="./my-stats/submit" id="my-stats">
 	<div id="agent-info">
 		<div class="avatar level-icon-75 {{ faction_class }} l{{ agent.level }}"/>
 		<div class="about">
 			<div class="name {{ faction_class }}">{{ agent.name }}</div>
 			<div class="level">LVL <span>{{ agent.level }}</span></div>
-			<div class="ap"><input type="number" name="ap" value="{{ attribute(agent.stats, 'ap') }}" min="{{ attribute(agent.stats, "ap") }}"/> AP</div>
+			<div class="ap"><input type="number" name="ap" value="{{ attribute(agent.stats, "ap") }}" min="{{ attribute(agent.stats, "ap") }}"/> AP</div>
 		</div>
 		<div class="badges" />
 	</div>
+	{% if agent.stat_date is defined %}
+	<input type="hidden" name="timestamp" value="{{ agent.stat_date }}" />
+	{% endif %}
 	<table>
 {% for stat in stats if stat.stat != "ap" %}
 	{% set title = "" %}
@@ -42,55 +55,52 @@
 </form>
 <script>
 function onPageLoad() {
-	if (StatTracker.message == "" || StatTracker.message == null)
-		$("#message").hide();
-	else
-		$("#message").html(StatTracker.message).show();
 
-	$.ajax({url: StatTracker.baseUrl + "data/badges",
-		dataType: "json",
-		statusCode: {
-			500 : function() {
-				alert("There was an error retrieving your badges.");
-			}
-		},
-		success: function(data) {
-			for (badge in data) {
-				if (badge == "level") continue;
-				name = badge.replace("_", " ");
-				name = name.replace(/\w\S*/g, function(txt){return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();});
-				key = badge.replace("_", "");
-				level = data[badge];
-				name += " (" + level.charAt(0).toUpperCase() + level.substr(1) + ")";
-				url = StatTracker.baseUrl + "resources/images/" + key + "_" + level + ".png";
-				img = $(document.createElement("img")).attr("src", url)
-				                                      .attr("alt", name)
-				                                      .attr("title", name)
-                                                                      .addClass("small-badge-icon");
-				$(".badges").append(img);
-			}
+	function messageCheck() {
+		if (StatTracker.message === "" || StatTracker.message === null) {
+			$("#message").hide();
+		} 
+		else {
+			$("#message").html(StatTracker.message).show();
 		}
+	}
+
+	if (StatTracker.pageArguments.hasOwnProperty("date")) {
+		$("select[name='submission']").val(StatTracker.pageArguments.date);
+		StatTracker.message = "You are editing a past submission. Any changes will be reflected as if they were a part of the original submission";
+	}
+
+	messageCheck();
+
+	$("select[name='submission']").change(function() {
+		date = $(this).val();;
+		window.location = StatTracker.baseUrl + "my-stats?date=" + date;
+	});
+
+	$("form#my-stats").submit(function() {
+		$.ajax({
+			type: "POST",
+			url: StatTracker.baseUrl + "my-stats/submit",
+			data: $("form#my-stats").serialize(),
+			dataType: "json",
+			statusCode: {
+				500: function(jqXHR, status, error) {
+					$("#message").html(error);
+				}
+			},
+			success: function(data) {
+				console.log(data);
+				if (!data.error) {
+					$("#message").html(data.message).show();
+					window.scrollTo(0,0);
+				}
+				else {
+					alert(data.message);
+				}
+			}
+		});
+	
+		return false;
 	});
 }
-
-$("form#my-stats").submit(function() {
-	$.ajax({
-		type: "POST",
-		url: StatTracker.baseUrl + "my-stats/submit",
-		data: $("form#my-stats").serialize(),
-		dataType: "json",
-		success: function(data) {
-			console.log(data);
-			if (!data.error) {
-				$("#message").html(data.message).show();
-				window.scrollTo(0,0);
-			}
-			else {
-				alert(data.message);
-			}
-		}
-	});
-
-	return false;
-});
 </script>

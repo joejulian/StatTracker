@@ -70,9 +70,15 @@ $app->match('/{page}', function (Request $request, $page) use ($app) {
 })->assert('page', '[a-z-]+')
   ->value('page', 'dashboard');
 
-$app->get('/page/{page}', function($page) use ($app, $agent) {
+$app->get('/page/{page}', function(Request $request, $page) use ($app, $agent) {
 	if ($page == "my-stats") {
-		$agent->getLatestStats();
+		$params = StatTracker::filterPageParameters($request->query->all());
+		if (isset($params['date'])) {
+			$agent->getStatsForDate($params['date']);
+		}
+		else {
+			$agent->getLatestStats();
+		}
 	}
 
 	return $app['twig']->render($page.".twig", array(
@@ -143,7 +149,7 @@ $app->get('/data/{stat}/{view}/{when}', function($stat, $view, $when) use ($app,
 })->value('when', 'all');
 
 $app->post('/my-stats/submit', function () use ($app, $agent) {
-	return StatTracker::handleAgentStatsPost($agent, $_POST);
+	return $app->json(StatTracker::handleAgentStatsPost($agent, $_POST));
 });
 
 $app->run();
