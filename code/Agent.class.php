@@ -292,12 +292,17 @@ class Agent {
 	 * @return 
 	 */
 	public function getStatsForDate($date) {
-		if (!is_array($this->stats)) {
+		if (!is_array($this->stats) || !isset($agent->stat_date)) {
 			foreach (StatTracker::getStats() as $stat) {
 				$this->getStatForDate($stat->stat, $date);
 			}
 		}
 
+		foreach ($this->getSubmissions() as $entry) {
+			if ($entry['date'] == $date) {
+				$this->stat_date = $entry['timestamp'];
+			}
+		} 
 		return $this->stats;
 	}
 
