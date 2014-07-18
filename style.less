@@ -12,7 +12,6 @@ body {
 	background: rgba(0, 0, 0, 1);
 	color: @text-color;
 	font-family: "Coda", sans-serif;
-	font-size: 1em;
 	margin: 0;
 	padding: 0;
 
@@ -38,29 +37,6 @@ body {
 	}
 }
 
-.tabs {
-	border-top: 5px solid fadeout(@text-color, 50%);
-	padding: 0px;
-	width: 100%;
-	text-align: center;
-
-	li {
-		display: inline;
-
-		a {
-			color: @text-color;
-			text-align: center;
-			text-decoration: none;
-			text-transform: uppercase;
-			padding: 5px 20px; 
-		}		
-
-		a.selected {
-			background: fadeout(@text-color, 65%);
-		}
-	}
-}
-
 img.badge-icon {
 	width: 75px;
 	height: 75px;
@@ -74,6 +50,7 @@ img.small-badge-icon {
 }
 
 .summary {
+	font-size: 16px;
 	text-align: center;
 
 	> * {
@@ -133,7 +110,7 @@ table {
 		+ p {
 			display: block;
 			position: absolute;
-			top: 0px;
+			top: 21px;
 			left: 10px;
 			color: white;
 			font-size: 24px;
@@ -227,10 +204,10 @@ table {
 	.item { 
 		display: inline-block;
 		text-align: center;
-		margin: 0 2%;
+		/* margin: 0 2%; */
 		max-width: 500px;
-		min-width: 500px;
 		vertical-align: top;
+		width: 100%;
 	}
 }
 
@@ -340,6 +317,7 @@ table {
 
 #main-content {
 
+	padding-top: 70px;
 	text-align: center;
 
 	.quick-links {
@@ -395,18 +373,6 @@ table {
 			width: 300px;
 		}
 	}
-
-	.predictions {
-	}
-
-	.prediction {
-		display: inline-block;
-		vertical-align: top;
-		text-align: center;
-		max-width: 500px;
-		margin: 0 2%;
-	}
-
 }
 
 form#my-stats {

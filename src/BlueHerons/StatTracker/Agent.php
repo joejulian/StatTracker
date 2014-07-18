@@ -1,5 +1,7 @@
 <?php
-class Agent {
+namespace BlueHerons\StatTracker;
+
+class Agent extends \BlueHerons\Common\Agent {
 
 	public $name;
 	public $faction;
@@ -10,35 +12,23 @@ class Agent {
 	public $submissions;
 
 	/**
-	 * Returns the registered Agent for the given email address. If no agent is found, a generic
-	 * Agent object is returned.
+	 * Creates an instance of Agent from another object
 	 *
-	 * @param string $email_address 
+	 * @param $otherObject object to create a new instance from
 	 *
-	 * @return string Agent object
+	 * @return Agent instance
 	 */
-	public static function lookupAgentName($email_address) {
-		global $mysql;
-
-		$stmt = $mysql->prepare("SELECT agent, faction FROM Agent WHERE email = ?;");
-		$stmt->bind_param("s", $email_address);
-
-		if (!$stmt->execute()) {
-			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $stmt->errno, $stmt->error));
+	public static function createFrom($otherObject) {
+		if (get_class($otherObject) == "BlueHerons\\StatTracker\\Agent") {
+			return $otherObject;
 		}
-
-		$stmt->bind_result($agent, $faction);
-		$stmt->fetch();
-		$stmt->close();
-
-		if (empty($agent)) {
-			return new Agent();
+		else if (get_class($otherObject) == "BlueHerons\\Common\\Agent") {
+			$agent = new \BlueHerons\StatTracker\Agent($otherObject->name, $otherObject->faction);
+			return $agent;
 		}
 		else {
-			$agent = new Agent($agent);
-			$agent->faction = $faction;
-	
-			return $agent;
+			print_r($otherObject);
+			die(get_class($otherObject));
 		}
 	}
 
@@ -53,7 +43,7 @@ class Agent {
 	 *
 	 * @throws Exception if agent name is not found.
 	 */
-	public function __construct($agent = "Agent") {
+	public function __construct($agent = "Agent", $faction = "R") {
 		if (!is_string($agent)) {
 			throw new Exception("Agent name must be a string");
 		}
@@ -61,6 +51,7 @@ class Agent {
 		$agent = self::sanitizeAgentName($agent);
 
 		$this->name = $agent;
+		$this->faction = $faction;
 
 		if ($this->isValid()) {
 			$this->getLevel();
@@ -201,7 +192,7 @@ class Agent {
 	 * @return the value for the stat
 	 */
 	public function getLatestStat($stat, $refresh = false) {
-		if (!StatTracker::isValidStat($stat)) {
+		if (!\StatTracker::isValidStat($stat)) {
 			throw new Exception(sprintf("'%s' is not a valid stat", $stat));
 		}
 
@@ -238,7 +229,7 @@ class Agent {
 	 */
 	public function getLatestStats($refresh = false) {
 		if (!is_array($this->stats || $refresh)) {
-			foreach (StatTracker::getStats() as $stat) {
+			foreach (\StatTracker::getStats() as $stat) {
 				$this->getLatestStat($stat->stat, $refresh);
 			}
 		}
