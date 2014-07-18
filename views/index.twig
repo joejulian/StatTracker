@@ -3,67 +3,29 @@
 	<title>Stat Tracker - Blue Herons Resistance</title>
 	<link href='http://fonts.googleapis.com/css?family=Coda:400,700' rel='stylesheet' type='text/css' />
 	<link rel="shortcut icon" href="favicon.ico" />
+	{{ navbar_css|raw }}
 	<link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/themes/smoothness/jquery-ui.css" />
 	<link href="style.css" rel="stylesheet" />
-	<meta name="viewport" content="width=450" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 	<script type="text/javascript" src="//www.google.com/jsapi"></script>
-	<script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+	{{ navbar_js|raw }}
 	<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/jquery-ui.min.js"></script>
 	<script src="{{ app.request.basepath }}/scripts/jquery.tablesorter.min.js"></script>
 	<script src="{{ app.request.basepath }}/scripts/StatTracker.js"></script>
 	<script>
 	google.load('visualization', '1.0', {'packages':['corechart']});
 
-	function onSignInCallback(authResult) {
-		StatTracker.signinCallback(authResult);
-	}
-
 	$(document).ready(function() {
-		$("#login-dialog").hide();
-		$("#login-dialog").dialog({
-			autoOpen: false,
-			closeOnEscape: false,
-			dialogClass: "no-close",
-	                modal: true,
-			resizable: false,
-	                width: 400,
-	                height: "auto",
-			title: "Welcome, agent"
-        	});
-
 		StatTracker.pageToLoad = "{{ page }}";
-		StatTracker.authenticate();
+		StatTracker.loadPage();
 	});
 
 	</script>
 </head>
 <body>
-	<ul class="tabs">
-		<li class="dashboard">
-			<a href="./dashboard">Dashboard</a>
-		</li>
-		<li class="my-stats">
-			<a href="./my-stats">My Stats</a>
-		</li>
-		<li class="leaderboards">
-			<a href="./leaderboards">Leaderboards</a>
-		</li>
-	</ul>
-
+{{ navbar_html|raw }}
 	<div id="main-content">
 		<div class="loading" />
-	</div>
-
-	<div id="login-dialog">
-		<div id="login-buttons">
-			<div class="google">
-				<a href=""><span>Sign in with Google</span></a>
-			</div>
-		</div>
-
-		<div id="login-message"></div>
-
-		<p class="small-text">By signing into Stat Tracker, you are agreeing to the <a href="./terms-of-use">terms of use</a>. Please read and understand the terms of use to understand how the data you submit is used.</p>
 	</div>
 </body>
 </html>

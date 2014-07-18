@@ -3,7 +3,7 @@ session_start();
 
 require_once("config.php");
 require_once("code/StatTracker.class.php");
-require_once("code/Agent.class.php");
+//require_once("code/Agent.class.php");
 require_once("code/Authentication.class.php");
 require_once("vendor/autoload.php");
 
@@ -23,19 +23,42 @@ $app->register(new Silex\Provider\TwigServiceProvider(), array(
 	'twig.path' => __DIR__ . "/views",
 ));
 
-$agent = new Agent();
+$agent = new BlueHerons\StatTracker\Agent();
 if (isset($_SESSION['agent'])) {
 	$agent = unserialize($_SESSION['agent']);
+	$agent = \BlueHerons\StatTracker\Agent::createFrom($agent);
+	$_SESSION['agent'] = serialize($agent);
 }
+
+$navbar_options = array(
+	"app_url" => "http://api.johnluetke.net/ingress/stats",
+	"base_url" => "http://api.johnluetke.net/ingress"
+);
 
 // Default handler. Will match any alphnumeric string. If the page doesn't exist,
 // 404
-$app->match('/{page}', function ($page) use ($app) {
+$app->match('/{page}', function ($page) use ($app, $navbar_options) {
 	if ($page == "dashboard" ||
 	    $page == "my-stats" ||
 	    $page == "leaderboards") {
-	
+		$navbar = BlueHerons\Common\Navbar::create($navbar_options);
+		$leaderboard_links = array();
+		foreach (StatTracker::getStats() as $stat) {
+			$leaderboard_links[$stat->name] = "./leaderboards#" .$stat->stat;
+		}
+
 		return $app['twig']->render("index.twig", array(
+			"navbar_css" => $navbar->renderCSS(false),
+			"navbar_js" => $navbar->renderJS(false),
+			"navbar_html" => $navbar->render(
+						"Stat Tracker", 
+						null, 
+						array(
+							array(	"Dashboard" => "./dashboard", 
+								"My Stats" => "./my-stats", 
+								"Leaderboards" => $leaderboard_links)
+						), 
+						false),
 			"page" => $page
 		));
 	}
@@ -69,6 +92,10 @@ $app->match('/{page}', function ($page) use ($app) {
   ->value('page', 'dashboard');
 
 $app->get('/page/{page}', function($page) use ($app, $agent) {
+	if ($agent->numSubmissions == 0) {
+		$page = "my-stats";
+	}
+
 	if ($page == "my-stats") {
 		$agent->getLatestStats();
 	}
@@ -78,6 +105,7 @@ $app->get('/page/{page}', function($page) use ($app, $agent) {
 		"stats" => StatTracker::getStats(),
 		"faction_class" => $agent->faction == "R" ? "resistance-agent" : "enlightened-agent",
 		"faction_color" => $agent->faction == "R" ? RES_BLUE : ENL_GREEN,
+		"message" => ""
 	));
 });
 

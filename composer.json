@@ -1,8 +1,21 @@
 {
-    "require": {
-        "silex/silex": "~1.2",
-	"twig/twig": "~1.8",
-	"swiftmailer/swiftmailer": "~5.1.0",
-	"google/apiclient": "~1.0@beta"
-    }
+	"name": "BlueHerons/StatTracker",
+	"autoload": {
+		"psr-0": {
+			"BlueHerons\\StatTracker": "src"
+		}
+	},
+	"repositories": [
+		{
+			"type": "git",
+			"url": "https://github.com/BlueHerons/Common"
+		}
+	],
+	"require": {
+		"blueherons/common": "dev-master",
+		"google/apiclient": "~1.0@beta",
+		"silex/silex": "~1.2",
+		"swiftmailer/swiftmailer": "~5.1.0",
+		"twig/twig": "~1.8"
+	}
 }
