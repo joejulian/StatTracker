@@ -31,6 +31,7 @@ if (isset($_SESSION['agent'])) {
 }
 
 $navbar_options = array(
+	"app_name" => "Stat Tracker",
 	"app_url" => "http://api.johnluetke.net/ingress/stats",
 	"base_url" => "http://api.johnluetke.net/ingress"
 );
