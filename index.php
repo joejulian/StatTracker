@@ -1,9 +1,9 @@
 <?php
 require_once("config.php");
-require_once("code/StatTracker.class.php");
-//require_once("code/Agent.class.php");
-require_once("code/Authentication.class.php");
 require_once("vendor/autoload.php");
+require_once("code/StatTracker.class.php");
+require_once("src/BlueHerons/StatTracker/Agent.php");
+require_once("code/Authentication.class.php");
 
 const ENL_GREEN = "#2BED1B";
 const RES_BLUE = "#00BFFF";
