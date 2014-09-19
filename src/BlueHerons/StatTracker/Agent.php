@@ -45,12 +45,10 @@ class Agent extends \BlueHerons\Common\Agent {
 		$stmt->close();
 
 		if (empty($agent)) {
-			return new Agent();
+			return new \BlueHerons\StatTracker\Agent();
 		}
 		else {
-			$agent = new Agent($agent, $auth_code);
-			$agent->faction = $faction;
-
+			$agent = new \BlueHerons\StatTracker\Agent($agent, $faction, $auth_code);
 			return $agent;
 		}
 	}
@@ -78,10 +76,10 @@ class Agent extends \BlueHerons\Common\Agent {
 		$stmt->close();
 
 		if (empty($agent)) {
-			return new Agent();
+			return new \BlueHerons\StatTracker\Agent();
 		}
 		else {
-			$agent = new Agent($agent, $auth_code);
+			$agent = new \BlueHerons\StatTracker\Agent($agent, $auth_code);
 			$agent->faction = $faction;
 	
 			return $agent;
@@ -109,6 +107,9 @@ class Agent extends \BlueHerons\Common\Agent {
 		$this->name = $agent;
 		$this->faction = $faction;
 		$this->auth_code = $auth_code;
+		$this->valid = $this->isValid();
+		$this->vName = $this->name != "Agent";
+		$this->vAuth = !empty($this->auth_code);
 
 		if ($this->isValid()) {
 			$this->getLevel();

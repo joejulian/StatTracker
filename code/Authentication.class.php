@@ -170,7 +170,7 @@ class Authentication {
 				}
 
 				$response->email = $email_address;
-				$agent = Agent::lookupAgentName($email_address);
+				$agent = \BlueHerons\StatTracker\Agent::lookupAgentName($email_address);
 	
 				if (empty($agent->name) || $agent->name == "Agent") {
 					// They need to register

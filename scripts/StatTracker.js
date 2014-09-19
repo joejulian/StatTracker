@@ -1,5 +1,5 @@
 var StatTracker = new function() {
-	this.authUrl = "http://blueheronsresistance.com/";
+	this.authUrl = "http://api.johnluetke.net/ingress/stats/";
 	this.baseUrl = "http://api.johnluetke.net/ingress/stats/";
 	this.pageToLoad = "dashboard";
 	this.message = null;
@@ -34,7 +34,7 @@ var StatTracker = new function() {
 	}
 
 	this.authenticate = function() {
-		/*$.ajax({url: StatTracker.authUrl + "authenticate/login",
+		$.ajax({url: StatTracker.authUrl + "authenticate?action=login",
 			type: 'GET',
 			contentType: 'json',
 			success: function(result) {
@@ -66,7 +66,6 @@ var StatTracker = new function() {
 			},
 			processData: false
 		});
-*/
 	}
 
 	this.signinCallback = function(authResult) {

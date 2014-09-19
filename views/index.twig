@@ -16,8 +16,21 @@
 	google.load('visualization', '1.0', {'packages':['corechart']});
 
 	$(document).ready(function() {
+		$("#login-dialog").hide();
+		$("#login-dialog").dialog({
+			autoOpen: false,
+			closeOnEscape: false,
+			dialogClass: "no-close",
+	                modal: true,
+			resizable: false,
+	                width: 400,
+	                height: "auto",
+			title: "Welcome, agent"
+        	});
+
 		StatTracker.pageToLoad = "{{ page }}";
-		StatTracker.loadPage();
+		StatTracker.authenticate();
+		//StatTracker.loadPage();
 	});
 
 	</script>
@@ -26,6 +39,18 @@
 	{{ navbar_html|raw }}
 	<div id="main-content">
 		<div class="loading" />
+	</div>
+
+	<div id="login-dialog">
+		<div id="login-buttons">
+			<div class="google">
+				<a href=""><span>Sign in with Google</span></a>
+			</div>
+		</div>
+
+		<div id="login-message"></div>
+
+		<p class="small-text">By signing into Stat Tracker, you are agreeing to the <a href="./terms-of-use">terms of use</a>. Please read and understand the terms of use to understand how the data you submit is used.</p>
 	</div>
 </body>
 </html>
