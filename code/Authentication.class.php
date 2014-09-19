@@ -19,10 +19,11 @@ class Authentication {
 	 * will be updated.
 	 *
 	 * @param string $email_address the email address retrieved from authentication
+	 * @param bool   $newIfExists   Whether or not to issue a new auth code if one already exists
 	 *
 	 * @return void
 	 */
-	public static function generateAuthCode($email_address) {
+	public static function generateAuthCode($email_address, $newIfExists = false) {
 		global $mysql;
 		$length = 6;
 
@@ -31,19 +32,21 @@ class Authentication {
 		$start = rand(0, strlen($code) - $length - 1);	
 		$code = substr($code, $start, $length);
 
-		$stmt = $mysql->prepare("SELECT COUNT(*) FROM Agent WHERE email = ?;");
-		$stmt->bind_param("s", $email_address);
-		
-		if (!$stmt->execute()) {
-			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $stmt->errno, $stmt->error));
+		if (!$newIfExists) {
+			$stmt = $mysql->prepare("SELECT COUNT(*) FROM Agent WHERE email = ?;");
+			$stmt->bind_param("s", $email_address);
+
+			if (!$stmt->execute()) {
+				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $stmt->errno, $stmt->error));
+			}
+
+			$stmt->bind_result($num_rows);
+			$stmt->fetch();
+			$stmt->close();
 		}
 
-		$stmt->bind_result($num_rows);
-		$stmt->fetch();
-		$stmt->close();
-
-		if ($num_rows != 1) {
-			$stmt = $mysql->prepare("INSERT INTO Agent (`email`, `auth_code`) VALUES (?, ?);");
+		if ($num_rows != 1 || $newIfExists) {
+			$stmt = $mysql->prepare("INSERT INTO Agent (`email`, `auth_code`) VALUES (?, ?) ON DUPLICATE KEY UPDATE auth_code = VALUES(auth_code);");
 			$stmt->bind_param("ss", $email_address, $code);
 
 			if (!$stmt->execute()) {
@@ -101,6 +104,22 @@ class Authentication {
 		$mailer->send($message);
 	}
 
+	/**
+	 * Updates meta data about the user from the OAuth service on login
+	 *
+	 * @param string $email_address the primary identifier for the user
+	 * @param string $profile_id    the G+ id of the user
+	 */
+	public static function updateUserMeta($email_address, $profile_id) {
+		global $mysql;
+		$stmt = $mysql->prepare("UPDATE Agent SET profile_id = ? WHERE email = ?;");
+		$stmt->bind_param("ss", $profile_id, $email_address);
+
+		if (!$stmt->execute()) {
+			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
+		}
+	}
+
 	private function __construct() {
 		$this->client = new Google_Client();
 		$this->client->setApplicationName(GOOGLE_APP_NAME);
@@ -114,17 +133,19 @@ class Authentication {
 	}
 
 	public function login() {
+		global $app;
+
 		$response = new StdClass();
 		$response->error = false;
 
 		// Kick off the OAuth process
-		if (empty($_SESSION['token'])) {
+		if (empty($app['session']->get("token"))) {
 			$response->status = "authentication_required";
 			$response->url = $this->client->createAuthUrl();
 			return $response;
 		}
 
-		$this->client->setAccessToken($_SESSION['token']);
+		$this->client->setAccessToken($app['session']->get("token"));
 
 		if ($this->client->isAccessTokenExpired()) {
 			$response->status = "authentication_required";
@@ -132,45 +153,60 @@ class Authentication {
 			return $response;
 		}
 
-		try {
-			$me = $this->plus->people->get('me');
-			$email_address = "";
-			foreach ($me->getEmails() as $email) {
-				if ($email->type == "account") {
-					$email_address = $email->value;
+		if ($app['session']->get("agent") == null) {
+			try {
+				$me = $this->plus->people->get('me');
+				$email_address = "";
+				foreach ($me->getEmails() as $email) {
+					if ($email->type == "account") {
+						$email_address = $email->value;
+					}
+				}
+
+				if (empty($email_address)) {
+					$response->error = true;
+					$response->message = "No email address found";
+					return $response;
+				}
+
+				$response->email = $email_address;
+				$agent = Agent::lookupAgentName($email_address);
+	
+				if (empty($agent->name) || $agent->name == "Agent") {
+					// They need to register
+					self::generateAuthCode($email_address);
+					self::updateUserMeta($email_address, $me->id);
+					self::sendAuthCode($email_address);
+					$response->status = "registration_required";
+				}
+				else {
+					// Issue a new auth code
+					self::generateAuthCode($email_address, true);
+					self::updateUserMeta($email_address, $me->id);
+					$agent->getAuthCode(true);
+					$app['session']->set("agent", $agent);
+					$response->status = "okay";
+					$response->agent = $agent;
 				}
 			}
-
-			if (empty($email_address)) {
+			catch (Exception $e) {
 				$response->error = true;
-				$response->message = "No email address found";
+				$response->message = $e->getMessage();
 				return $response;
 			}
-
-			$response->email = $email_address;
-			$agent = Agent::lookupAgentName($email_address);
-			if (empty($agent->name) || $agent->name == "Agent") {
-				// They need to register
-				self::generateAuthCode($email_address);
-				self::sendAuthCode($email_address);
-				$response->status = "registration_required";
-			}
-			else {
-				$response->status = "okay";
-				$response->agent = $agent;
-				$_SESSION['agent'] = serialize($agent);
-			}
-
-			return $response;
 		}
-		catch (Exception $e) {
-			$response->error = true;
-			$response->message = $e->getMessage();
-			return $response;
+		else {
+			$agent = $app['session']->get("agent");
+			$response->status = "okay";
+			$response->agent = $agent;
 		}
+
+		return $response;
 	}
 
 	public function callback() {
+		global $app;
+
 		if (!isset($_REQUEST['code'])) {
 			throw new Exception("Invalid callback parameters");
 		}
@@ -191,7 +227,7 @@ class Authentication {
 			setcookie($name, '', time()-1000);
 			setcookie($name, '', time()-1000, '/');
 		}
-		$this->client->revokeToken($_SESSION['token']);
+		$this->client->revokeToken($app['session']->get("token"));
 		session_destroy();
 		$response = new stdClass();
 		$response->status = "logged_out";
@@ -199,6 +235,8 @@ class Authentication {
 	}
 
 	private function getToken() {
+		global $app;
+
 		$code = "";
 		if (isset($_REQUEST['code'])) {
 			$code = $_REQUEST['code'];
@@ -209,7 +247,7 @@ class Authentication {
 
 		try {
 			$this->client->authenticate($code);
-			$_SESSION['token'] = $this->client->getAccessToken();
+			$app['session']->set("token", $this->client->getAccessToken());
 		}
 		catch (Exception $e) {
 			print_r("caught except retrieveing token");

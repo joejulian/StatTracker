@@ -62,10 +62,25 @@ class StatTracker {
 		global $mysql;
 		$length = 6;
 
-		$code = md5($email_address);
-		$code = str_shuffle($code);
-		$start = rand(0, strlen($code) - $length - 1);	
-		$code = substr($code, $start, $length);
+		$stmt = $mysql->prepare("SELECT COUNT(*) FROM Agent WHERE auth_code = ?;");
+		$stmt->bind_param("s", $auth_code);
+		$stmt->bind_result($num_rows);
+
+		do {
+			$code = md5($email_address);
+			$code = str_shuffle($code);
+			$start = rand(0, strlen($code) - $length - 1);
+			$code = substr($code, $start, $length);
+
+			$auth_code = $code;
+
+			if (!$stmt->execute()) {
+				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $stmt->errno, $stmt->error));
+			}
+			$stmt->fetch();
+		}
+		while ($num_rows != 0);
+		$stmt->close();
 
 		$stmt = $mysql->prepare("SELECT COUNT(*) FROM Agent WHERE email = ?;");
 		$stmt->bind_param("s", $email_address);
@@ -117,9 +132,10 @@ class StatTracker {
 		$stmt->fetch();
 		$stmt->close();
 
-		$msg = "Thanks for registering with the Blue Heron's Stat Tracker. In order to validate your " .
-		       "identity, please message the following code to <strong>@CaptCynicism</strong> in " .
+		$msg = "Thanks for registering with ". GROUP_NAME ."'s Stat Tracker. In order to validate your " .
+		       "identity, please message the following code to <strong>@". ADMIN_AGENT ."</strong> in " .
 		       "faction comms: ".
+		       "<p/> ".
 		       "<pre>%s</pre> " .
 		       "<p/> ".
 		       "You will recieve a reply message once you have been activated. This may take up to " .
@@ -134,7 +150,7 @@ class StatTracker {
 		$mailer = Swift_Mailer::newInstance($transport);
 
 		$message = Swift_Message::newInstance('Stat Tracker Registration')
-				->setFrom(array('stats@blueheronsreistance.com' => 'Blue Herons Resistance'))
+				->setFrom(array(GROUP_EMAIL => GROUP_NAME))
 				->setTo(array($email_address))
 				->setBody($msg, 'text/html', 'iso-8859-2');
 
@@ -154,9 +170,23 @@ class StatTracker {
 			$response->message = sprintf("Invalid agent: %s", $agent->name);
 		}
 		else {
-			$ts = date("Y-m-d H:i:s");
-			$stmt = $mysql->prepare("INSERT INTO Data VALUES (?, ?, ?, ?);");
-			$stmt->bind_param("sssd", $agent_name, $ts, $stat_key, $value);
+			$agent_name = $agent->name;
+			$stmt = $mysql->prepare("SELECT COALESCE(MIN(date), CAST(NOW() AS Date)) FROM Data WHERE agent = ?");
+			$stmt->bind_param("s", $agent_name);
+			$stmt->bind_result($min_date);
+
+			if (!$stmt->execute()) {
+					$response->error = true;
+					$response->message = sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error);
+					return json_encode($response, JSON_NUMERIC_CHECK);
+			}
+			$stmt->fetch();
+			$stmt->close();
+
+			$ts = date("Y-m-d 00:00:00");
+			$dt = date("Y-m-d");
+			$stmt = $mysql->prepare("INSERT INTO Data (agent, date, timepoint, timestamp, stat, value) VALUES (?, ?, DATEDIFF(NOW(), ?) + 1, ?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value);");
+			$stmt->bind_param("sssssd", $agent_name, $dt, $min_date, $ts, $stat_key, $value);
 
 			foreach (self::getStats() as $stat) {
 				if (!isset($postdata[$stat->stat])) {
@@ -171,7 +201,7 @@ class StatTracker {
 	
 				if (!$stmt->execute()) {
 					$response->error = true;
-					$response->message = sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error);
+					$response->message = sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $stmt->errno, $stmt->error);
 				}
 
 				if ($response->error) {
@@ -181,11 +211,18 @@ class StatTracker {
 
 			$stmt->close();
 
-			if (!$response->error && $agent->getSubmissionCount() <= 1) {
-				$response->message = "Your stats have been received. Since this was your first submission, predictions are not available. Submit again tomorrow to see your predictions.";
-			}
-			else if (!$response->error) {
-				$response->message = "Your stats have been received.";
+			// Need to refresh stored session data
+			$agent = Agent::lookupAgentByAuthCode($agent->auth_code);
+			$_SESSION['agent'] = serialize($agent);
+
+			$ts = strtotime($dt);
+
+			if (!$response->error) {
+				$response->message = sprintf("Your stats for %s have been received.", date("l, F j", $ts));
+
+				if (!$agent->hasSubmitted()) {
+					$response->message .= " Since this was your first submission, predictions are not available. Submit again tomorrow to see your predictions.";
+				}
 			}
 		}
 
@@ -197,17 +234,12 @@ class StatTracker {
 	 *
 	 * @param Agent agent the agent whose data should be used
 	 *
-	 * @return string JSON string
+	 * @return string Object AP Breakdown object
 	 */
-	public function getAPBreakdownJSON($agent) {
+	public function getAPBreakdown($agent) {
 		global $mysql;
 	
-		$sql = sprintf("CALL GetRawStatsForAgent('%s');", $agent->name);
-		if (!$mysql->query($sql)) {
-			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-                }
-		
-		$sql = "CALL GetAPBreakdown();";
+		$sql = sprintf("CALL GetAPBreakdown('%s');", $agent->name);
 		if (!$mysql->query($sql)) {
 			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
                 }
@@ -224,7 +256,7 @@ class StatTracker {
 			$data[] = array($row['name'], $row['ap_gained']);
 		}
 
-	 	return json_encode($data, JSON_NUMERIC_CHECK);
+	 	return $data;
 	}
 
 	/**
@@ -235,19 +267,14 @@ class StatTracker {
 	 * @param Agent $agent Agent to retrieve prediction for
 	 * @param string $stat Stat to retrieve prediction for
 	 *
-	 * @return JSON string
+	 * @return Object prediciton object
 	 */
-	public static function getPredictionJSON($agent, $stat) {
+	public static function getPrediction($agent, $stat) {
 		global $mysql;
 
 		$data = new stdClass();
 		if (StatTracker::isValidStat($stat)) {
-			$sql = sprintf("CALL GetRawStatsForAgent('%s');", $agent->name);
-			if (!$mysql->query($sql)) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));	
-			}
-
-			$sql = sprintf("CALL GetBadgePrediction('%s');", $stat);
+			$sql = sprintf("CALL GetBadgePrediction2('%s', '%s');", $agent->name, $stat);
 			if (!$mysql->query($sql)) {
 				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error    ));        
 			}
@@ -259,7 +286,7 @@ class StatTracker {
 			$data = self::buildPredictionResponse($row);
 		}
 
-		return json_encode($data, JSON_NUMERIC_CHECK);
+		return $data;
 	}
 
 	/**
@@ -268,30 +295,16 @@ class StatTracker {
 	 * @param string $stat the stat to generate the data for
 	 * @param Agent agent the agent whose data should be used
 	 *
-	 * @return string JSON string
+	 * @return string Object Graph Data object
 	 */
-	public function getGraphDataJSON($stat, $agent) {
+	public static function getGraphData($stat, $agent) {
 		global $mysql;
 
-		$sql = sprintf("CALL GetRawStatsForAgent('%s');", $agent->name);
-		if (!$mysql->query($sql)) {
-			die(sprintf("%s: (%s) %s", __LINE__, $mysql->errno, $mysql->error));
-		}
-
-		$sql = sprintf("CALL GetGraphDataForStat('%s');", $stat);
+		$sql = sprintf("CALL GetGraphForStat('%s', '%s');", $agent->name, $stat);
 		if (!$mysql->query($sql)) {
 			die(sprintf("%s: (%s) %s", __LINE__, $mysql->errno, $mysql->error));
 		}
 	
-		$sql = "SELECT * FROM BadgePrediction;";
-		$res = $mysql->query($sql);
-
-		if (!$res) {
-			die(sprintf("%s: (%s) %s", __LINE__, $mysql->errno, $mysql->error));
-		}
-	
-		$prediction = self::buildPredictionResponse($res->fetch_assoc());
-
 		$sql = "SELECT * FROM GraphDataForStat;";
 		$res = $mysql->query($sql);
 
@@ -309,10 +322,10 @@ class StatTracker {
 		}
 
 		$response = new stdClass();
-		$response->prediction = $prediction;
+		$response->prediction = self::getPrediction($agent, $stat);
 		$response->graph = $graph;
 
-		return json_encode($response, JSON_NUMERIC_CHECK);
+		return $response;
 	}
 
 	/**
@@ -323,16 +336,16 @@ class StatTracker {
 	 *
 	 * @return string JSON string
 	 */
-	public static function getLeaderboardJSON($stat, $when) {
+	public static function getLeaderboard($stat, $when) {
 		global $mysql;
-		$sunday = strtotime('last sunday', strtotime('tomorrow'));
+		$monday = strtotime('last monday', strtotime('tomorrow'));
 		switch ($when) {
 			case "this-week":
-				$thisweek = date("Y-m-d", $sunday);
+				$thisweek = date("Y-m-d", $monday);
 				$sql = sprintf("CALL GetWeeklyLeaderboardForStat('%s', '%s');", $stat, $thisweek);
 				break;
 			case "last-week":
-				$lastweek = date("Y-m-d", strtotime('7 days ago', $sunday));
+				$lastweek = date("Y-m-d", strtotime('7 days ago', $monday));
 				$sql = sprintf("CALL GetWeeklyLeaderboardForStat('%s', '%s');", $stat, $lastweek);
 				break;
 			case "alltime":
@@ -353,30 +366,30 @@ class StatTracker {
 			$results[] = array(
 				"rank" => $row['rank'],
 				"agent" => $row['agent'],
-				"value" => $row['value'],
+				"value" => number_format($row['value']),
 				"age" => $row['age']
 			);
 		}
 
-		return json_encode($results, JSON_NUMERIC_CHECK);
+		return $results;
 	}
 
 	private function buildPredictionResponse($row) {
 		$data = new stdClass();
 
-		$data->stat = $row['Stat'];
-		$data->name = $row['Name'];
+		$data->stat = $row['stat'];
+		$data->name = $row['name'];
 		$data->unit = $row['unit'];
-		$data->badge = $row['Badge'];
-		$data->current = $row['Current'];
-		$data->next = $row['Next'];
+		$data->badge = $row['badge'];
+		$data->current = $row['current'];
+		$data->next = $row['next'];
 		$data->progress = $row['progress'];
-		$data->amount_remaining = $row['Remaining'];
+		$data->amount_remaining = $row['remaining'];
 		$data->silver_remaining = $row['silver_remaining'];
 		$data->gold_remaining = $row['gold_remaining'];
 		$data->platinum_remaining = $row['platinum_remaining'];
 		$data->onyx_remaining = $row['onyx_remaining'];
-		$data->days_remaining = $row['Days'];
+		$data->days_remaining = $row['days'];
 		$data->rate = $row['slope'];
 
 		return $data;

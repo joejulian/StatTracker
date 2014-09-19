@@ -4,12 +4,10 @@ namespace BlueHerons\StatTracker;
 class Agent extends \BlueHerons\Common\Agent {
 
 	public $name;
+	public $auth_code;
 	public $faction;
 	public $level;
 	public $stats;
-	public $badges;
-
-	public $submissions;
 
 	/**
 	 * Creates an instance of Agent from another object
@@ -32,6 +30,64 @@ class Agent extends \BlueHerons\Common\Agent {
 		}
 	}
 
+	public static function lookupAgentName($email_address) {
+		global $mysql;
+
+		$stmt = $mysql->prepare("SELECT agent, faction, auth_code FROM Agent WHERE email = ?;");
+		$stmt->bind_param("s", $email_address);
+
+		if (!$stmt->execute()) {
+			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $stmt->errno, $stmt->error));
+		}
+
+		$stmt->bind_result($agent, $faction, $auth_code);
+		$stmt->fetch();
+		$stmt->close();
+
+		if (empty($agent)) {
+			return new Agent();
+		}
+		else {
+			$agent = new Agent($agent, $auth_code);
+			$agent->faction = $faction;
+
+			return $agent;
+		}
+	}
+
+	/**
+	 * Retruns the registered Agent for the given auth_code. If not agent is found, a generic
+	 * Agent object is returned.
+	 *
+	 * @param string $auth_code
+	 *
+	 * @return object Agent object
+	 */
+	public static function lookupAgentByAuthCode($auth_code) {
+		global $mysql;
+
+		$stmt = $mysql->prepare("SELECT agent, faction FROM Agent WHERE auth_code = ?;");
+		$stmt->bind_param("s", $auth_code);
+
+		if (!$stmt->execute()) {
+			die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $stmt->errno, $stmt->error));
+		}
+
+		$stmt->bind_result($agent, $faction);
+		$stmt->fetch();
+		$stmt->close();
+
+		if (empty($agent)) {
+			return new Agent();
+		}
+		else {
+			$agent = new Agent($agent, $auth_code);
+			$agent->faction = $faction;
+	
+			return $agent;
+		}
+	}
+
 	/**
 	 * Constructs a new Agent object for the given agent name. This object will include all information
 	 * publicly visible from the "Agent Profile" screen in Ingress: Agent name, AP, and badges earned.
@@ -43,7 +99,7 @@ class Agent extends \BlueHerons\Common\Agent {
 	 *
 	 * @throws Exception if agent name is not found.
 	 */
-	public function __construct($agent = "Agent", $faction = "R") {
+	public function __construct($agent = "Agent", $faction = "R", $auth_code = null) {
 		if (!is_string($agent)) {
 			throw new Exception("Agent name must be a string");
 		}
@@ -52,11 +108,13 @@ class Agent extends \BlueHerons\Common\Agent {
 
 		$this->name = $agent;
 		$this->faction = $faction;
+		$this->auth_code = $auth_code;
 
 		if ($this->isValid()) {
 			$this->getLevel();
+			$this->hasSubmitted();
 			$this->getLatestStat('ap');
-			$this->getSubmissions();
+			$this->getLatestUpdate();
 		}
 	}
 
@@ -66,7 +124,7 @@ class Agent extends \BlueHerons\Common\Agent {
 	 * @return boolean true if agent is valid, false otherwise
 	 */
 	public function isValid() {
-		return $this->name != "Agent";
+		return $this->name != "Agent" && !empty($this->auth_code);
 	}
 
 	/**
@@ -111,6 +169,28 @@ class Agent extends \BlueHerons\Common\Agent {
 	}
 
 	/**
+	 * Gets the auth code for the agent
+	 * 
+	 * @param bool $refresh Whether or not to refetch the value from the database
+	 *
+	 * @return the auth code for thw agent
+	 */
+	public function getAuthCode($refresh = false) {
+		if (!isset($this->auth_code) || $refresh) {
+			global $mysql;
+			$sql = sprintf("SELECT auth_code FROM Agent WHERE agent = '%s';", $this->name);
+			$res = $mysql->query($sql);
+			if (!$res) {
+				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
+			}
+
+			$this->auth_code = $res->fetch_assoc()['auth_code'];
+		}
+
+		return $this->auth_code;
+	}
+
+	/**
 	 * Gets the current level for the Agent. Considers AP and badges.
 	 *
 	 * @returns int current Agent level
@@ -119,13 +199,7 @@ class Agent extends \BlueHerons\Common\Agent {
 		if (!isset($this->level)) {
 			global $mysql;
 
-			$sql = "CALL GetRawStatsForAgent('%s');";
-			$sql = sprintf($sql, $this->name);
-			if (!$mysql->query($sql)) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-			}
-
-			$sql = "CALL GetCurrentLevel();";
+			$sql = sprintf("CALL GetCurrentLevel('%s');", $this->name);
 			if (!$mysql->query($sql)) {
 				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
 			}
@@ -142,45 +216,48 @@ class Agent extends \BlueHerons\Common\Agent {
 		return $this->level;
 	}
 
-	/** 
-	 * Gets the remaining requirements that the agent must fulfill to get to the next level. 
-	 *
+	/**
+	 * Determines if the Agent has submitted to Stat Tracker
 	 */
-	public function getRemainingLevelRequirements() {
-		if (!isset($this->remaining_requirements)) {
+	public function hasSubmitted($refresh = false) {
+		if (!isset($this->has_submitted) || $refresh) {
 			global $mysql;
 
-			$sql = "CALL GetRawStatsForAgent('%s');";
+			$sql = "SELECT count(stat) > 0 AS result FROM Data WHERE stat = 'ap' AND agent = '%s';";
 			$sql = sprintf($sql, $this->name);
-			if (!$mysql->query($sql)) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-			}
 
-			$sql = "CALL GetRemainingLevelRequirements();";
-			if (!$mysql->query($sql)) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-			}
-
-			$sql = "SELECT * FROM RemainingLevelRequirements;";
 			$res = $mysql->query($sql);
 			if (!$res) {
 				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
 			}
 
-			$this->remaining_requirements = $res->fetch_assoc();
+			$this->has_submitted = $res->fetch_assoc()['result'] == 1;
+
 		}
 
-		return $this->remaining_requirements;
+		return $this->has_submitted;
 	}
 
 	/**
-	 * Retrieves the number of times (once / day) that an Agent has submitted data
-	 *
-	 * @return int number of submissions
+	 * Gets the last timestamp for then this agent's data was updated
 	 */
-	public function getSubmissionCount() {
-		$this->getSubmissions();
-		return $this->numSubmissions;
+	public function getLatestUpdate($refresh = false) {
+		if (!isset($this->latest_update) || $refresh) {
+			global $mysql;
+
+			$sql = "SELECT UNIX_TIMESTAMP(MAX(updated)) `updated` FROM Data WHERE agent = '%s';";
+			$sql = sprintf($sql, $this->name);
+
+			$res = $mysql->query($sql);
+			if (!$res) {
+				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
+			}
+
+			$this->latest_update = $res->fetch_assoc()['updated'];
+
+		}
+
+		return $this->latest_update;		
 	}
 
 	/**
@@ -203,13 +280,13 @@ class Agent extends \BlueHerons\Common\Agent {
 		if (!is_array($this->stats) || !isset($this->stats[$stat]) || $refresh) {
 			global $mysql;
 			
-			$sql = "SELECT value, timestamp FROM Data WHERE stat = '%s' AND agent ='%s' ORDER BY timestamp DESC LIMIT 1;";
+			$sql = "SELECT value, date FROM Data WHERE stat = '%s' AND agent ='%s' ORDER BY date DESC LIMIT 1;";
 			$sql = sprintf($sql, $stat, $this->name);
 			$res = $mysql->query($sql);
 			$row = $res->fetch_assoc();
 			
-			$this->latest_entry = $row['timestamp'];
-			
+			$this->latest_entry = $row['date'];
+
 			if (!is_array($this->stats)) {
 				$this->stats = array();
 			}
@@ -249,12 +326,7 @@ class Agent extends \BlueHerons\Common\Agent {
 		if (!is_array($this->badges) || $refresh) {
 			global $mysql;
 
-			$sql = sprintf("CALL GetRawStatsForAgent('%s');", $this->name);
-			if (!$mysql->query($sql)) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-			}
-	
-			$sql = sprintf("CALL GetCurrentBadges();", $this->name);
+			$sql = sprintf("CALL GetCurrentBadges('%s');", $this->name);
 			if (!$mysql->query($sql)) {
 				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
 			}
@@ -282,6 +354,11 @@ class Agent extends \BlueHerons\Common\Agent {
 		return $this->badges;
 	}
 
+	/**
+	 * Gets the ratios of stats for the given agent.
+	 *
+	 * @return array top leve entries are a tatio "pair", with a sub array containing keys stat1, stat2, and ratio
+	 */
 	public function getRatios() {
 		if (!is_array($this->ratios)) {
 			global $mysql;
@@ -325,7 +402,7 @@ class Agent extends \BlueHerons\Common\Agent {
 	}
 
 	/**
-	 * Gets the next X  badges for the agent, ordered by least time remaining
+	 * Gets the next X badges for the agent, ordered by least time remaining
 	 *
 	 * @param int $limit number of badges to return, default 3
 	 *
@@ -335,17 +412,13 @@ class Agent extends \BlueHerons\Common\Agent {
 		if (!is_array($this->upcoming_badges)) {
 			global $mysql;
 
-			$sql = sprintf("CALL GetRawStatsForAgent('%s');", $this->name);
-			if (!$mysql->query($sql)) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-			}
-	
-			$sql = sprintf("CALL GetBadgeOverview();", $this->name);
+			$sql = sprintf("CALL GetUpcomingBadges('%s');", $this->name);
 			if (!$mysql->query($sql)) {
 				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
 			}
 
-			$sql = sprintf("SELECT * FROM BadgeOverview WHERE (days_remaining > 0 OR days_remaining IS NULL) ORDER BY days_remaining ASC LIMIT %s;", $limit);
+			$sql = sprintf("SELECT * FROM UpcomingBadges WHERE (days_remaining > 0 OR days_remaining IS NULL) ORDER BY days_remaining ASC LIMIT %s;", $limit);
+
 			$res = $mysql->query($sql);
 
 			if (!$res) {
@@ -371,39 +444,6 @@ class Agent extends \BlueHerons\Common\Agent {
 		}
 
 		return $this->upcoming_badges;
-	}
-
-	/**
-	 * Gets the date and timestamps for an Agent's stat submissions. This is limited to the latest
-	 * submission on a given day -- multiple submission per day are counted as 1 submissions.
-	 *
-	 * @return array of objects containing a date and a timestamp
-	 */
-	public function getSubmissions() {
-		if (!is_array($this->submissions)) {
-			global $mysql;
-
-			$sql = sprintf("CALL GetRawStatsForAgent('%s');", $this->name);
-			if (!$mysql->query($sql)) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-			}
-
-			$sql = "SELECT DISTINCT date, timestamp FROM RawStatsForAgent ORDER BY date DESC;";
-			$res = $mysql->query($sql);
-
-			if (!$res) {
-				die(sprintf("%s:%s\n(%s) %s", __FILE__, __LINE__, $mysql->errno, $mysql->error));
-			}
-
-			$this->submissions = array();
-			while ($row = $res->fetch_assoc()) {
-				$this->submissions[] = $row;
-			}
-			$this->numSubmissions = sizeof($this->submissions);
-		}
-
-		return $this->submissions;
-
 	}
 }
 ?>

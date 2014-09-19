@@ -34,12 +34,14 @@
 			<h3>Ratios</h3>
 			<div id="ratios">
 				<div class="ratio">
-					<div class="badge badge-1">
-						<div class="badge-image badge-icon-75" />
-					</div>
-					<div class="seperator">:</div>
-					<div class="badge badge-2">
-						<div class="badge-image badge-icon-75" />
+					<div class="badges">
+						<div class="badge badge-1">
+							<div class="badge-image badge-icon-75" />
+						</div>
+						<div class="seperator">:</div>
+						<div class="badge badge-2">
+							<div class="badge-image badge-icon-75" />
+						</div>
 					</div>
 					<div class="value" />
 				</div>
@@ -81,7 +83,8 @@
 </div>
 <script>
 function onPageLoad() {
-	$.ajax({url: StatTracker.baseUrl + "data/badges/upcoming",
+	$.ajax({url: StatTracker.baseUrl + "api/{{ agent.auth_code }}/badges/upcoming",
+		data: { ts: '{{ agent.latest_update }}' },
 		dataType: "json",
 		statusCode: {
 			500: function() {
@@ -108,7 +111,8 @@ function onPageLoad() {
 		}
 	});
 
-	$.ajax({url: StatTracker.baseUrl + "data/ratios",
+	$.ajax({url: StatTracker.baseUrl + "api/{{ agent.auth_code }}/ratios",
+		data: { ts: '{{ agent.latest_update }}' },
 		dataType: "json",
 		statusCode: {
 			500: function() {
@@ -133,7 +137,8 @@ function onPageLoad() {
 		}
 	});
 
-	$.ajax({url: StatTracker.baseUrl + "data/ap/breakdown",
+	$.ajax({url: StatTracker.baseUrl + "api/{{ agent.auth_code }}/ap/breakdown",
+		data: { ts: '{{ agent.latest_update }}' },
 		dataType: "json",
 		statusCode: {
 			500: function() {
@@ -171,7 +176,8 @@ function onPageLoad() {
 	});
 
 	function loadStatPrediction(stat, name) {
-		$.ajax({url: StatTracker.baseUrl + "data/" + stat +"/graph",
+		$.ajax({url: StatTracker.baseUrl + "api/{{ agent.auth_code }}/" + stat +"/graph",
+			data: { ts: '{{ agent.latest_update }}' },
 			dataType: "json",
 			statusCode: {
 				500: function() {
@@ -182,9 +188,13 @@ function onPageLoad() {
 				if (data.prediction.rate == null) {
 					$(".prediction." + stat).hide();
 				}
-				else if (data.prediction.badge != "") {
+				else if (data.prediction.badge != null) {
 				
 					$(".prediction." + stat + " .next-badge .badge-image + .percent-complete span").html(Math.floor(data.prediction.progress * 100) +"%");
+
+					if (data.prediction.next == null) {
+						$(".prediction." + stat + " .next-badge").hide();
+					}
 
 					msg = "";
 					if (data.prediction.badge == "Level") {
@@ -198,15 +208,22 @@ function onPageLoad() {
 						$(".prediction." + stat + " .next-badge .level-icon-75").addClass("{{ faction_class }}");
 						$(".prediction." + stat + " .next-badge .level-icon-75").addClass("l" + data.prediction.next);
 						$(".prediction." + stat + " .next-badge .level-icon-75").css("opacity", data.prediction.progress / 1.5);	
-						msg = "You have " + data.prediction.amount_remaining + " " + data.prediction.unit + " remaining for level " + data.prediction.next + ".<p/>At your average rate of " + data.prediction.rate + " per day, that should take " + data.prediction.days_remaining + " days";
+						msg = "You have " + data.prediction.amount_remaining + " " + data.prediction.unit + " remaining for level " + data.prediction.next + ".<p/>At your average rate of " + data.prediction.rate + " per day, that should take " + data.prediction.days_remaining + " days.";
 					}
 					else {
 						$(".prediction." + stat + " .current-badge .badge-icon-75").addClass(data.prediction.badge.toLowerCase().replace(" ", ""));
 						$(".prediction." + stat + " .current-badge .badge-icon-75").addClass(data.prediction.current.toString().toLowerCase());
-						$(".prediction." + stat + " .next-badge .badge-icon-75").addClass(data.prediction.badge.toString().toLowerCase().replace(" ", ""));
-						$(".prediction." + stat + " .next-badge .badge-icon-75").addClass(data.prediction.next.toString().toLowerCase());
-						$(".prediction." + stat + " .next-badge .badge-icon-75").css("opacity", data.prediction.progress / 1.5);
-						msg = "You have " + data.prediction.amount_remaining + " " + data.prediction.unit + " remaining for the " + data.prediction.next + " badge.<p/>At your average rate of " + data.prediction.rate + " per day, that should take " + data.prediction.days_remaining + " days";
+
+						if (data.prediction.next != null) {
+							$(".prediction." + stat + " .next-badge .badge-icon-75").addClass(data.prediction.badge.toString().toLowerCase().replace(" ", ""));
+							$(".prediction." + stat + " .next-badge .badge-icon-75").addClass(data.prediction.next.toString().toLowerCase());
+							$(".prediction." + stat + " .next-badge .badge-icon-75").css("opacity", data.prediction.progress / 1.5);
+							msg = "You have " + data.prediction.amount_remaining + " " + data.prediction.unit + " remaining for the " + data.prediction.next + " badge.<p/>At your average rate of " + data.prediction.rate + " per day, that should take " + data.prediction.days_remaining + " days.";
+						}
+						else {
+							$(".prediction." + stat + " .badge-prediction").css("display", "block");
+							msg += "Your average rate is " + data.prediction.rate + " " + data.prediction.unit + " per day";
+						}
 					}
 	
 					$(".prediction." + stat + " .badge-prediction").html(msg);

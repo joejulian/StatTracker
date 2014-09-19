@@ -1,6 +1,4 @@
 <?php
-session_start();
-
 require_once("config.php");
 require_once("code/StatTracker.class.php");
 //require_once("code/Agent.class.php");
@@ -19,15 +17,15 @@ if ($mysql->connect_errno) {
 
 $app = new Silex\Application();
 $app['debug'] = true;
+$app->register(new Silex\Provider\SessionServiceProvider());
 $app->register(new Silex\Provider\TwigServiceProvider(), array(
 	'twig.path' => __DIR__ . "/views",
 ));
 
 $agent = new BlueHerons\StatTracker\Agent();
-if (isset($_SESSION['agent'])) {
-	$agent = unserialize($_SESSION['agent']);
+if ($app['session']->get("agent") !== null) {
+	$agent = $app['session']->get("agent");
 	$agent = \BlueHerons\StatTracker\Agent::createFrom($agent);
-	$_SESSION['agent'] = serialize($agent);
 }
 
 $navbar_options = array(
@@ -38,9 +36,9 @@ $navbar_options = array(
 
 // Default handler. Will match any alphnumeric string. If the page doesn't exist,
 // 404
-$app->match('/{page}', function ($page) use ($app, $navbar_options) {
+$app->get('/{page}', function ($page) use ($app) {
 	if ($page == "dashboard" ||
-	    $page == "my-stats" ||
+	    $page == "submit-stats" ||
 	    $page == "leaderboards") {
 		$navbar = BlueHerons\Common\Navbar::create($navbar_options);
 		$leaderboard_links = array();
@@ -93,12 +91,8 @@ $app->match('/{page}', function ($page) use ($app, $navbar_options) {
   ->value('page', 'dashboard');
 
 $app->get('/page/{page}', function($page) use ($app, $agent) {
-	if ($agent->numSubmissions == 0) {
-		$page = "my-stats";
-	}
-
-	if ($page == "my-stats") {
-		$agent->getLatestStats();
+	if ($page == "submit-stats") {
+		$agent->getLatestStats(true);
 	}
 
 	return $app['twig']->render($page.".twig", array(
@@ -110,66 +104,5 @@ $app->get('/page/{page}', function($page) use ($app, $agent) {
 	));
 });
 
-$app->get('/data/badges/{what}', function($what) use ($app, $agent) {
-	switch ($what) {
-		case "upcoming":
-			$data = $agent->getUpcomingBadges();
-			break;
-		case "current":
-		default:
-			$data = $agent->getBadges();
-			break;
-	}
-	return $app->json($data);
-});
-
-$app->get('/data/submissions', function() use ($app, $agent) {
-	$data = $agent->getSubmissions();
-	return json_encode($data);
-});
-
-$app->get('/data/level/{what}', function ($what) use ($app, $agent) {
-	switch ($what) {
-		case "remaining":
-			$data = $agent->getRemainingLevelRequirements();
-			break;
-		default:
-			$data = $agent->getLevel();
-			break;
-	}
-
-	return $app->json($data);
-});
-
-$app->get('/data/ratios', function() use ($app, $agent) {
-	$data = $agent->getRatios();
-	return $app->json($data);
-});
-
-$app->get('/data/{stat}/{view}/{when}', function($stat, $view, $when) use ($app, $agent) {
-	$data = "";
-	switch ($view) {
-		case "breakdown":
-			$data = StatTracker::getAPBreakdownJSON($agent);
-			break;
-		case "leaderboard":
-			$data = StatTracker::getLeaderboardJSON($stat, $when);	
-			break;
-		case "prediction":
-			$data = StatTracker::getPredictionJSON($agent, $stat);
-			break;
-		case "graph":
-		default:
-			$data = StatTracker::getGraphDataJSON($stat, $agent);
-			break;
-	}
-
-	return $data;
-})->value('when', 'all');
-
-$app->post('/my-stats/submit', function () use ($app, $agent) {
-	return StatTracker::handleAgentStatsPost($agent, $_POST);
-});
-
 $app->run();
-
+?>
