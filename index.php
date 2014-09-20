@@ -54,7 +54,7 @@ $app->get('/{page}', function ($page) use ($app) {
 						null, 
 						array(
 							array(	"Dashboard" => "./dashboard", 
-								"My Stats" => "./my-stats", 
+								"Submit Stats" => "./submit-stats", 
 								"Leaderboards" => $leaderboard_links)
 						), 
 						false),
