@@ -1,9 +1,9 @@
 <?php
 require_once("config.php");
-require_once("code/StatTracker.class.php");
-require_once("code/Agent.class.php");
-require_once("code/Authentication.class.php");
 require_once("vendor/autoload.php");
+require_once("code/StatTracker.class.php");
+require_once("code/Authentication.class.php");
+require_once("src/BlueHerons/StatTracker/Agent.php");
 
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -18,7 +18,7 @@ $app = new Silex\Application();
 $app->register(new Silex\Provider\SessionServiceProvider());
 
 $app->get("/api/{auth_code}/my-data/{when}.{format}", function($auth_code, $format) use ($app) {
-	$agent = Agent::lookupAgentByAuthCode($auth_code);
+	$agent = \BlueHerons\StatTracker\Agent::lookupAgentByAuthCode($auth_code);
 
 	$data = new stdClass;
 
@@ -46,7 +46,7 @@ $app->get("/api/{auth_code}/my-data/{when}.{format}", function($auth_code, $form
 
 // Retrieve basic information about the agent
 $app->get("/api/{auth_code}", function($auth_code) use ($app) {
-	$agent = Agent::lookupAgentByAuthCode($auth_code);
+	$agent = \BlueHerons\StatTracker\Agent::lookupAgentByAuthCode($auth_code);
 
 	if (!$agent->isValid()) {
 		return $app->abort(404);
@@ -57,7 +57,7 @@ $app->get("/api/{auth_code}", function($auth_code) use ($app) {
 
 // Retrieve badge information for the agent
 $app->get("/api/{auth_code}/badges/{what}", function(Request $request, $auth_code, $what) use ($app) {
-	$agent = Agent::lookupAgentByAuthCode($auth_code);
+	$agent = \BlueHerons\StatTracker\Agent::lookupAgentByAuthCode($auth_code);
 	
 	if (!$agent->isValid()) {
 		return $app->abort(404);
@@ -80,7 +80,7 @@ $app->get("/api/{auth_code}/badges/{what}", function(Request $request, $auth_cod
 
 // Retrieve ratio information for the agent
 $app->get("/api/{auth_code}/ratios", function($auth_code) use ($app) {
-	$agent = Agent::lookupAgentByAuthCode($auth_code);
+	$agent = \BlueHerons\StatTracker\Agent::lookupAgentByAuthCode($auth_code);
 
 	if (!$agent->isValid()) {
 		return $app->abort(404);
@@ -92,7 +92,7 @@ $app->get("/api/{auth_code}/ratios", function($auth_code) use ($app) {
 
 // Retrieve raw or compiled data for a single stat for the agent
 $app->get("/api/{auth_code}/{stat}/{view}/{when}.{format}", function($auth_code, $stat, $view, $when, $format) use ($app) {
-	$agent = Agent::lookupAgentByAuthCode($auth_code);
+	$agent = \BlueHerons\StatTracker\Agent::lookupAgentByAuthCode($auth_code);
 
 	if (!$agent->isValid()) {
 		return $app->abort(404);
@@ -134,14 +134,14 @@ $app->get("/api/{auth_code}/{stat}/{view}/{when}.{format}", function($auth_code,
 
 // Allow agents to submit stats
 $app->post("/api/{auth_code}/submit", function ($auth_code) use ($app) {
-	$agent = Agent::lookupAgentByAuthCode($auth_code);
+	$agent = \BlueHerons\StatTracker\Agent::lookupAgentByAuthCode($auth_code);
 
 	if (!$agent->isValid()) {
 		return $app->abort(404);
 	}
 
 	$response = StatTracker::handleAgentStatsPost($agent, $_POST);
-	$app['session']->set("agent", Agent::lookupAgentByAuthCode($auth_code));
+	$app['session']->set("agent", \BlueHerons\StatTracker\Agent::lookupAgentByAuthCode($auth_code));
 
 	return $response;
 });
